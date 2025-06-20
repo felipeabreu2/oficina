@@ -1,0 +1,412 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  document  String   @unique
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  users               User[]
+  products            Product[]
+  clients             Client[]
+  vehicles            Vehicle[]
+  budgets             Budget[]
+  sales               Sale[]
+  installments        Installment[]
+  stockMovements      StockMovement[]
+  services            Service[]
+  accountsReceivable  AccountsReceivable[]
+  accountsPayable     AccountsPayable[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  companyId    String   @map("company_id")
+  name         String
+  email        String
+  passwordHash String   @map("password_hash")
+  role         String   @default("USER")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, email])
+  @@map("users")
+}
+
+enum ProductType {
+  PNEU_NOVO
+  PNEU_USADO
+  PNEU_REMOLD
+  PECAS_UTENSILIOS
+  SERVICO
+
+  @@map("product_type")
+}
+
+model Product {
+  id              String      @id @default(uuid())
+  companyId       String      @map("company_id")
+  code            String
+  type            ProductType
+  brand           String
+  model           String
+  size            String
+  price           Decimal     @db.Decimal(10, 2)
+  costPrice       Decimal?    @map("cost_price") @db.Decimal(10, 2)
+  stock           Int         @default(0)
+  minStock        Int         @default(5) @map("min_stock")
+  conditionRating Int?        @map("condition_rating")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  budgetItems    BudgetItem[]
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  serviceItems   ServiceItem[]
+
+  @@unique([companyId, code])
+  @@map("products")
+}
+
+model Client {
+  id          String    @id @default(uuid())
+  companyId   String    @map("company_id")
+  code        String
+  name        String
+  document    String
+  phone       String
+  email       String?
+  address     String?
+  totalSpent  Decimal   @default(0) @map("total_spent") @db.Decimal(10, 2)
+  lastPurchase DateTime? @map("last_purchase") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vehicles           Vehicle[]
+  budgets            Budget[]
+  sales              Sale[]
+  services           Service[]
+  accountsReceivable AccountsReceivable[]
+
+  @@unique([companyId, code])
+  @@unique([companyId, document])
+  @@map("clients")
+}
+
+model Vehicle {
+  id         String   @id @default(uuid())
+  companyId  String   @map("company_id")
+  clientId   String   @map("client_id")
+  plate      String
+  brand      String
+  model      String
+  year       Int
+  frontTires String?  @map("front_tires")
+  rearTires  String?  @map("rear_tires")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  services Service[]
+
+  @@unique([companyId, plate])
+  @@map("vehicles")
+}
+
+enum BudgetStatus {
+  PENDENTE
+  APROVADO
+  CONVERTIDO
+  CANCELADO
+
+  @@map("budget_status")
+}
+
+model Budget {
+  id              String        @id @default(uuid())
+  companyId       String        @map("company_id")
+  code            String
+  clientId        String        @map("client_id")
+  subtotal        Decimal       @db.Decimal(10, 2)
+  generalDiscount Decimal       @default(0) @map("general_discount") @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  validityDate    DateTime      @map("validity_date") @db.Date
+  status          BudgetStatus  @default(PENDENTE)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client      Client       @relation(fields: [clientId], references: [id])
+  budgetItems BudgetItem[]
+  sales       Sale[]
+
+  @@unique([companyId, code])
+  @@map("budgets")
+}
+
+model BudgetItem {
+  id        String   @id @default(uuid())
+  budgetId  String   @map("budget_id")
+  productId String   @map("product_id")
+  quantity  Int
+  unitPrice Decimal  @map("unit_price") @db.Decimal(10, 2)
+  discount  Decimal  @default(0) @db.Decimal(10, 2)
+  total     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  budget  Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("budget_items")
+}
+
+enum PaymentMethod {
+  A_VISTA
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  PIX
+  CREDIARIO
+  BOLETO
+
+  @@map("payment_method")
+}
+
+enum SaleStatus {
+  PAGO
+  PENDENTE
+  CANCELADO
+
+  @@map("sale_status")
+}
+
+model Sale {
+  id              String        @id @default(uuid())
+  companyId       String        @map("company_id")
+  code            String
+  clientId        String        @map("client_id")
+  budgetId        String?       @map("budget_id")
+  subtotal        Decimal       @db.Decimal(10, 2)
+  generalDiscount Decimal       @default(0) @map("general_discount") @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  paymentMethod   PaymentMethod @map("payment_method")
+  status          SaleStatus    @default(PAGO)
+  saleDate        DateTime      @map("sale_date") @db.Date
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client       Client        @relation(fields: [clientId], references: [id])
+  budget       Budget?       @relation(fields: [budgetId], references: [id])
+  saleItems    SaleItem[]
+  installments Installment[]
+
+  @@unique([companyId, code])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String   @id @default(uuid())
+  saleId    String   @map("sale_id")
+  productId String   @map("product_id")
+  quantity  Int
+  unitPrice Decimal  @map("unit_price") @db.Decimal(10, 2)
+  discount  Decimal  @default(0) @db.Decimal(10, 2)
+  total     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+model Installment {
+  id               String   @id @default(uuid())
+  companyId        String   @map("company_id")
+  saleId           String   @map("sale_id")
+  code             String
+  totalValue       Decimal  @map("total_value") @db.Decimal(10, 2)
+  paidValue        Decimal  @default(0) @map("paid_value") @db.Decimal(10, 2)
+  remainingValue   Decimal  @map("remaining_value") @db.Decimal(10, 2)
+  installmentCount Int      @map("installment_count")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sale               Sale                 @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  installmentPayments InstallmentPayment[]
+
+  @@unique([companyId, code])
+  @@map("installments")
+}
+
+enum InstallmentStatus {
+  PENDENTE
+  PAGO
+  ATRASADO
+  CANCELADO
+
+  @@map("installment_status")
+}
+
+model InstallmentPayment {
+  id                String            @id @default(uuid())
+  installmentId     String            @map("installment_id")
+  installmentNumber Int               @map("installment_number")
+  value             Decimal           @db.Decimal(10, 2)
+  dueDate           DateTime          @map("due_date") @db.Date
+  paymentDate       DateTime?         @map("payment_date") @db.Date
+  status            InstallmentStatus @default(PENDENTE)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  installment        Installment          @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  accountsReceivable AccountsReceivable[]
+
+  @@map("installment_payments")
+}
+
+enum MovementType {
+  ENTRADA
+  SAIDA
+  AJUSTE
+
+  @@map("movement_type")
+}
+
+model StockMovement {
+  id          String       @id @default(uuid())
+  companyId   String       @map("company_id")
+  productId   String       @map("product_id")
+  type        MovementType
+  quantity    Int
+  reason      String
+  referenceId String?      @map("reference_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("stock_movements")
+}
+
+enum ServiceStatus {
+  AGENDADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+
+  @@map("service_status")
+}
+
+model Service {
+  id           String        @id @default(uuid())
+  companyId    String        @map("company_id")
+  code         String
+  clientId     String        @map("client_id")
+  vehicleId    String?       @map("vehicle_id")
+  serviceDate  DateTime      @map("service_date") @db.Date
+  serviceTime  String?       @map("service_time")
+  description  String
+  status       ServiceStatus @default(AGENDADO)
+  totalValue   Decimal?      @map("total_value") @db.Decimal(10, 2)
+  observations String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client       Client        @relation(fields: [clientId], references: [id])
+  vehicle      Vehicle?      @relation(fields: [vehicleId], references: [id])
+  serviceItems ServiceItem[]
+
+  @@unique([companyId, code])
+  @@map("services")
+}
+
+model ServiceItem {
+  id          String   @id @default(uuid())
+  serviceId   String   @map("service_id")
+  productId   String?  @map("product_id")
+  description String
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(10, 2)
+  total       Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  service Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@map("service_items")
+}
+
+model AccountsReceivable {
+  id                   String             @id @default(uuid())
+  companyId            String             @map("company_id")
+  clientId             String             @map("client_id")
+  installmentPaymentId String?            @map("installment_payment_id")
+  description          String
+  value                Decimal            @db.Decimal(10, 2)
+  dueDate              DateTime           @map("due_date") @db.Date
+  paymentDate          DateTime?          @map("payment_date") @db.Date
+  status               InstallmentStatus  @default(PENDENTE)
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client             Client              @relation(fields: [clientId], references: [id])
+  installmentPayment InstallmentPayment? @relation(fields: [installmentPaymentId], references: [id])
+
+  @@map("accounts_receivable")
+}
+
+model AccountsPayable {
+  id           String            @id @default(uuid())
+  companyId    String            @map("company_id")
+  supplierName String            @map("supplier_name")
+  description  String
+  category     String
+  value        Decimal           @db.Decimal(10, 2)
+  dueDate      DateTime          @map("due_date") @db.Date
+  paymentDate  DateTime?         @map("payment_date") @db.Date
+  status       InstallmentStatus @default(PENDENTE)
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("accounts_payable")
+}
